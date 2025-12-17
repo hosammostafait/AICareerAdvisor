@@ -1,8 +1,16 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { UserInput, AIPlanResponse, VideoRecommendation, ArticleRecommendation } from "../types";
 
-// Initialize the client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// وظيفة للحصول على المفتاح مع التنبيه في حال فقدانه
+const getApiKey = () => {
+  const key = process.env.API_KEY;
+  if (!key || key === "undefined") {
+    console.error("خطأ: مفتاح API_KEY غير موجود في إعدادات البيئة (Environment Variables).");
+    return "";
+  }
+  return key;
+};
 
 const responseSchema: Schema = {
   type: Type.OBJECT,
@@ -17,59 +25,51 @@ const responseSchema: Schema = {
       items: {
         type: Type.OBJECT,
         properties: {
-          name: { type: Type.STRING, description: "Name of the tool" },
-          description: { type: Type.STRING, description: "Brief description of the tool" },
-          usage: { type: Type.STRING, description: "How to apply this tool specifically to the user's tasks" },
-          url: { type: Type.STRING, description: "The official website URL of the tool (e.g., https://chat.openai.com)" },
+          name: { type: Type.STRING },
+          description: { type: Type.STRING },
+          usage: { type: Type.STRING },
+          url: { type: Type.STRING },
           category: { 
             type: Type.STRING, 
-            enum: ['writing', 'image', 'video', 'design', 'coding', 'productivity', 'other'],
-            description: "The primary category of the tool" 
+            enum: ['writing', 'image', 'video', 'design', 'coding', 'productivity', 'other']
           },
-          isPaid: {
-             type: Type.BOOLEAN,
-             description: "TRUE if the tool requires a subscription (e.g. ChatGPT Plus, Midjourney). FALSE if it is completely free."
-          }
+          isPaid: { type: Type.BOOLEAN }
         },
         required: ["name", "description", "usage", "url", "category", "isPaid"],
       },
     },
     videos: {
       type: Type.ARRAY,
-      description: "Recommended YouTube learning topics.",
       items: {
         type: Type.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "Title of the video or topic" },
-          summary: { type: Type.STRING, description: "What the user will learn from this video" },
-          searchQuery: { type: Type.STRING, description: "The optimal search query to find this on YouTube" },
+          title: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          searchQuery: { type: Type.STRING },
         },
         required: ["title", "summary", "searchQuery"],
       },
     },
     courses: {
       type: Type.ARRAY,
-      description: "Recommended professional courses from platforms like Udemy, Coursera, Yanfaa, Almentor, LinkedIn Learning.",
       items: {
         type: Type.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "Title of the course" },
-          platform: { type: Type.STRING, description: "Name of the platform (e.g., Udemy, Coursera, Yanfaa, Almentor)" },
-          instructor: { type: Type.STRING, description: "Name of instructor or organization if known (optional)" },
-          summary: { type: Type.STRING, description: "Why this course is good for the user" },
-          url: { type: Type.STRING, description: "Use a SEARCH URL for the platform to ensure it works (e.g., https://www.udemy.com/courses/search/?q=python). DO NOT guess specific course IDs." }
+          title: { type: Type.STRING },
+          platform: { type: Type.STRING },
+          instructor: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          url: { type: Type.STRING }
         },
         required: ["title", "platform", "summary", "url"]
       }
     },
     steps: {
       type: Type.ARRAY,
-      description: "Exactly 3 actionable steps to start immediately.",
       items: { type: Type.STRING },
     },
     tips: {
       type: Type.ARRAY,
-      description: "Practical tips to avoid distraction.",
       items: { type: Type.STRING },
     },
   },
@@ -77,9 +77,14 @@ const responseSchema: Schema = {
 };
 
 export const generatePlan = async (input: UserInput): Promise<AIPlanResponse> => {
-  const model = "gemini-2.5-flash";
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("مفتاح الـ API غير مهيأ. يرجى إضافته في إعدادات البيئة باسم API_KEY");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const model = "gemini-3-flash-preview";
   
-  // Removed the explicit request for articles from the prompt to avoid hallucinations
   const prompt = `
     أنت مستشار وظيفي متخصص في الذكاء الاصطناعي.
     المستخدم يعمل في المهنة التالية: "${input.profession}".
@@ -87,11 +92,10 @@ export const generatePlan = async (input: UserInput): Promise<AIPlanResponse> =>
     مستوى خبرته: "${input.experience}".
     
     المطلوب:
-    1. **أدوات AI**: قائمة بأفضل أدوات الذكاء الاصطناعي (مزيج مجاني ومدفوع 40% مدفوع على الأقل). حدد بدقة في الحقل (isPaid) ما إذا كانت الأداة مدفوعة.
+    1. **أدوات AI**: قائمة بأفضل أدوات الذكاء الاصطناعي (مزيج مجاني ومدفوع).
     2. **يوتيوب**: اقترح قنوات وفيديوهات يوتيوب تعليمية.
-    3. **دورات تعليمية (Courses)**: اقترح 3-5 دورات تعليمية متخصصة من منصات معروفة مثل (Udemy, Coursera, EdX, LinkedIn Learning, Yanfaa, Almentor). حاول تنويع المنصات واذكر اسم المنصة بوضوح.
-       *هام*: استخدم روابط البحث (Search URLs) للدورات لضمان عمل الروابط (مثال: https://www.udemy.com/courses/search/?q=marketing).
-    4. خطة عمل من 3 خطوات.
+    3. **دورات تعليمية**: اقترح 3-5 دورات من (Udemy, Coursera, LinkedIn Learning, Almentor).
+    4. خطة عمل من 3 خطوات عملية.
     5. نصائح للتركيز.
     
     استخدم اللغة العربية السهلة والمشجعة.
@@ -109,28 +113,24 @@ export const generatePlan = async (input: UserInput): Promise<AIPlanResponse> =>
     });
 
     const text = response.text;
-    if (!text) {
-        throw new Error("No response from AI");
-    }
+    if (!text) throw new Error("No response from AI");
     
     const plan = JSON.parse(text) as AIPlanResponse;
 
-    // 1. Inject "Ekteb Sah" YouTube Channel
+    // حقن الروابط الثابتة لمبادرة اكتب صح
     const ektebSahChannel: VideoRecommendation = {
         title: "قناة اكتب صح - حسام مصطفى إبراهيم",
-        summary: "قناة متميزة لتبسيط أدوات الذكاء الاصطناعي وشرح كيفية توظيفها في العمل والحياة اليومية بأسلوب سهل وعملي.",
+        summary: "شروحات عملية لتوظيف الذكاء الاصطناعي في العمل اليومي.",
         searchQuery: "اكتب صح حسام مصطفى",
         url: "https://www.youtube.com/@Ektebsa7"
     };
     plan.videos = [ektebSahChannel, ...plan.videos];
 
-    // 2. Inject "Ekteb Sah" Website Article (Static Link - No Hallucinations)
     const ektebSahArticle: ArticleRecommendation = {
         title: "مقالات عن الذكاء الاصطناعي - موقع اكتب صح",
-        summary: "تصفح أحدث المقالات والشروحات حول أدوات الذكاء الاصطناعي وكيفية الاستفادة منها في مجالك.",
+        summary: "تصفح أحدث المقالات والشروحات حول أدوات الذكاء الاصطناعي وكيفية الاستفادة منها.",
         url: "https://www.ektebsa7.com/?cat=631"
     };
-    // Initialize articles array if it doesn't exist (since we removed it from schema requirement)
     plan.articles = [ektebSahArticle];
 
     return plan;
