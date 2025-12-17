@@ -1,13 +1,14 @@
 
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { UserInput, AIPlanResponse, VideoRecommendation, ArticleRecommendation } from "../types";
+import { UserInput, AIPlanResponse } from "../types";
 
 const getApiKey = () => {
+  // استخدام القيمة مباشرة من process.env كما هو مطلوب برمجياً
   const key = process.env.API_KEY;
-  if (!key || key === "undefined" || key === "") {
-    return null;
+  if (key && key !== "undefined" && key !== "") {
+    return key;
   }
-  return key;
+  return null;
 };
 
 const responseSchema: Schema = {
@@ -62,14 +63,17 @@ const responseSchema: Schema = {
 
 export const generatePlan = async (input: UserInput): Promise<AIPlanResponse> => {
   const apiKey = getApiKey();
+  
   if (!apiKey) {
     throw new Error("MISSING_KEY");
   }
 
+  // إنشاء المثيل مباشرة قبل الطلب لضمان استخدام المفتاح الأحدث
   const ai = new GoogleGenAI({ apiKey });
-  const model = "gemini-3-flash-preview";
+  // استخدام الإصدار الاحترافي لنتائج أكثر ذكاءً
+  const model = "gemini-3-pro-preview";
   
-  const prompt = `أنت مستشار ذكاء اصطناعي. المستخدم مهنته: ${input.profession}، المهام: ${input.tasks}، الخبرة: ${input.experience}. قدم خطة أدوات وكورسات بالعربية.`;
+  const prompt = `أنت مستشار ذكاء اصطناعي خبير. المستخدم يعمل بمهنة: ${input.profession}. المهام الأساسية: ${input.tasks}. مستوى الخبرة: ${input.experience}. قدم خطة كاملة لتوظيف الذكاء الاصطناعي في عمله باللغة العربية بصيغة JSON.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -86,22 +90,23 @@ export const generatePlan = async (input: UserInput): Promise<AIPlanResponse> =>
     
     const plan = JSON.parse(text) as AIPlanResponse;
 
+    // موارد إضافية ثابتة
     plan.videos = [{
         title: "قناة اكتب صح - حسام مصطفى إبراهيم",
-        summary: "شروحات عملية لتوظيف الذكاء الاصطناعي.",
+        summary: "شروحات عملية وتطبيقية لتوظيف الذكاء الاصطناعي في المهام اليومية.",
         searchQuery: "اكتب صح حسام مصطفى",
         url: "https://www.youtube.com/@Ektebsa7"
     }, ...plan.videos];
 
     plan.articles = [{
-        title: "مقالات الذكاء الاصطناعي - اكتب صح",
-        summary: "تصفح أحدث الشروحات.",
+        title: "مقالات الذكاء الاصطناعي - موقع اكتب صح",
+        summary: "تصفح أحدث المقالات والشروحات حول أدوات الذكاء الاصطناعي.",
         url: "https://www.ektebsa7.com/?cat=631"
     }];
 
     return plan;
   } catch (error: any) {
-    console.error("Gemini Error:", error);
+    console.error("Gemini API Error:", error);
     if (error.message?.includes("403") || error.message?.includes("API_KEY_INVALID")) {
         throw new Error("INVALID_KEY");
     }
